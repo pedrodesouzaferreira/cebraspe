@@ -62,7 +62,11 @@ class ClassifiedText:
     text_path: str
     filename: str
     source_pdf_guess: str
-    concurso_guess: str
+    text_rel_path: str
+    year_dir: str
+    concurso_id: str
+    original_pdf_path: str
+    original_pdf_exists: int
     doc_type_rule: str
     confidence: float
     needs_llm_review: int
@@ -147,35 +151,18 @@ def stable_id(path: Path) -> str:
     return hashlib.sha1(str(path).encode("utf-8")).hexdigest()[:16]
 
 
-def source_pdf_guess(filename: str) -> str:
-    if filename.lower().endswith(".pdf.txt"):
-        return filename[:-4]
-    if filename.lower().endswith(".txt"):
-        return filename[:-4] + ".PDF"
-    return filename
+def source_pdf_from_text_path(path: Path, text_dir: Path) -> tuple[str, int]:
+    rel = path.relative_to(text_dir)
+    rel_without_txt = Path(str(rel)[:-4]) if str(rel).lower().endswith(".txt") else rel
+    pdf = ROOT / "Data" / "CEBRASPE" / "Raw Data" / "www.cespe.unb.br" / "concursos" / "_antigos" / "2006" / rel_without_txt
+    return str(pdf), int(pdf.exists())
 
 
-def concurso_guess(filename: str) -> str:
-    stem = filename
-    for suffix in [".PDF.txt", ".pdf.txt", ".txt"]:
-        if stem.endswith(suffix):
-            stem = stem[: -len(suffix)]
-            break
-    stem = stem.strip()
-    patterns = [
-        r"^ED(?:ITAL)?[_ ]+(?:COMP[_ ]+)?\d+[_ ]+(?:\d{4}[_ ]+)?([A-Z][A-Z0-9]+(?:[_ ][A-Z0-9]+){0,3})",
-        r"^([A-Z]{2,8}(?:[_ ][A-Z]{2,8})?)_",
-        r"^(TRE[_ ]?[A-Z]{2}|TSE[_ ]?DF|TREs)",
-        r"^([A-Z]{3,12}\d{4})",
-    ]
-    for pat in patterns:
-        match = re.search(pat, stem)
-        if match:
-            token = match.group(1)
-            token = re.sub(r"\s+", "_", token)
-            token = re.sub(r"_(RES|RESULTADO|GAB|CARGO|PROVA|DEMANDA|COMUNICADO).*$", "", token, flags=re.I)
-            return token.strip("_")
-    return ""
+def infer_year_and_concurso(path: Path, text_dir: Path) -> tuple[str, str]:
+    rel_parts = path.relative_to(text_dir).parts
+    year_dir = text_dir.name
+    concurso_id = rel_parts[0] if rel_parts else ""
+    return year_dir, concurso_id
 
 
 def compact_snippet(text: str, max_chars: int = 700) -> str:
@@ -267,6 +254,9 @@ def choose_label(scores: dict[str, int], evidence: list[str], text: str) -> tupl
 def classify_one(path: Path, text_dir: Path) -> ClassifiedText:
     text = path.read_text(encoding="utf-8", errors="replace")
     filename = path.name
+    text_rel_path = str(path.relative_to(text_dir))
+    year_dir, concurso_id = infer_year_and_concurso(path, text_dir)
+    original_pdf_path, original_pdf_exists = source_pdf_from_text_path(path, text_dir)
     scores, evidence = score_document(filename, text)
     label, confidence, needs_llm = choose_label(scores, evidence, text)
     n_reg = len(REGISTRATION_RE.findall(text))
@@ -275,8 +265,12 @@ def classify_one(path: Path, text_dir: Path) -> ClassifiedText:
         text_id=stable_id(path.relative_to(text_dir)),
         text_path=str(path),
         filename=filename,
-        source_pdf_guess=source_pdf_guess(filename),
-        concurso_guess=concurso_guess(filename),
+        source_pdf_guess=Path(original_pdf_path).name,
+        text_rel_path=text_rel_path,
+        year_dir=year_dir,
+        concurso_id=concurso_id,
+        original_pdf_path=original_pdf_path,
+        original_pdf_exists=original_pdf_exists,
         doc_type_rule=label,
         confidence=confidence,
         needs_llm_review=needs_llm,
@@ -375,8 +369,64 @@ def main() -> None:
         ["text_id", "filename", "doc_type_rule", "confidence", "evidence", "head_snippet", "candidate_snippet", "llm_doc_type", "llm_notes"],
     )
 
+    result_rows = [
+        {
+            "text_id": row.text_id,
+            "year_dir": row.year_dir,
+            "concurso_id": row.concurso_id,
+            "doc_type_rule": row.doc_type_rule,
+            "confidence": row.confidence,
+            "needs_llm_review": row.needs_llm_review,
+            "n_registration_like": row.n_registration_like,
+            "n_score_rank_like": row.n_score_rank_like,
+            "has_candidate_table_header": row.has_candidate_table_header,
+            "has_result_phrase": row.has_result_phrase,
+            "text_path": row.text_path,
+            "original_pdf_path": row.original_pdf_path,
+            "filename": row.filename,
+            "candidate_snippet": row.candidate_snippet,
+            "manual_extract_priority": "",
+            "manual_notes": "",
+        }
+        for row in rows
+        if row.doc_type_rule in {"final_result", "provisional_result", "intermediate_result"}
+        or (row.n_registration_like >= 20 and row.has_result_phrase)
+    ]
+    result_rows.sort(
+        key=lambda r: (
+            r["doc_type_rule"] != "final_result",
+            -int(r["n_score_rank_like"]),
+            -int(r["n_registration_like"]),
+            r["concurso_id"],
+            r["filename"],
+        )
+    )
+    write_csv(
+        out_dir / "classification_2006_result_extraction_queue.csv",
+        result_rows,
+        [
+            "text_id",
+            "year_dir",
+            "concurso_id",
+            "doc_type_rule",
+            "confidence",
+            "needs_llm_review",
+            "n_registration_like",
+            "n_score_rank_like",
+            "has_candidate_table_header",
+            "has_result_phrase",
+            "text_path",
+            "original_pdf_path",
+            "filename",
+            "candidate_snippet",
+            "manual_extract_priority",
+            "manual_notes",
+        ],
+    )
+
     print(f"Classified files: {len(rows)}")
     print(f"Needs LLM/manual review: {len(llm_rows)}")
+    print(f"Result extraction queue: {len(result_rows)}")
     print(f"Output directory: {out_dir}")
 
 
