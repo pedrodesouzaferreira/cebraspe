@@ -1,5 +1,5 @@
-SRC_ROOT="/Users/pedroferreira/Dropbox (Personal)/MY PROJECTS/CONCURSOS/Data/CEBRASPE/Raw Data/www.cespe.unb.br/concursos/_antigos/2006"
-OUT_ROOT="/Users/pedroferreira/Dropbox (Personal)/MY PROJECTS/CONCURSOS/Data/CEBRASPE/Raw Data/text/2006"
+SRC_ROOT="/Users/pedroferreira/Dropbox (Personal)/MY PROJECTS/CONCURSOS/Data/CEBRASPE/Raw Data/www.cespe.unb.br/concursos/_antigos/2007"
+OUT_ROOT="/Users/pedroferreira/Dropbox (Personal)/MY PROJECTS/CONCURSOS/Data/CEBRASPE/Raw Data/text/2007"
 
 mkdir -p "$OUT_ROOT"
 
