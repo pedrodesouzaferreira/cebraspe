@@ -1,9 +1,0 @@
-mkdir -p "/Users/pedroferreira/Dropbox (Personal)/MY PROJECTS/CONCURSOS/Data/CEBRASPE/Raw Data/text/2006"
-
-find "/Users/pedroferreira/Dropbox (Personal)/MY PROJECTS/CONCURSOS/Data/CEBRASPE/Raw Data/www.cespe.unb.br/concursos/_antigos/2006" \
-    -type f -iname "*.pdf" |
-while IFS= read -r pdf; do
-    base=$(basename "${pdf%.pdf}")
-    pdftotext -layout "$pdf" \
-        "/Users/pedroferreira/Dropbox (Personal)/MY PROJECTS/CONCURSOS/Data/CEBRASPE/Raw Data/text/2006/${base}.txt"
-done
