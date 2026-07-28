@@ -3,6 +3,10 @@ wget --recursive --level=inf --no-parent --ignore-case -e robots=off --no-clobbe
 wget --recursive --level=inf --no-parent --ignore-case -e robots=off --no-clobber --wait=1 --random-wait --limit-rate=500k -i "/Users/pedroferreira/Dropbox (Personal)/MY PROJECTS/CONCURSOS/Data/CEBRASPE/Raw Data/cespe_urls/urls_2003.txt"
 wget --recursive --level=inf --no-parent --ignore-case -e robots=off --no-clobber --wait=1 --random-wait --limit-rate=500k -i "/Users/pedroferreira/Dropbox (Personal)/MY PROJECTS/CONCURSOS/Data/CEBRASPE/Raw Data/cespe_urls/urls_2004.txt"
 wget --recursive --level=inf --no-parent --ignore-case -e robots=off --no-clobber --wait=1 --random-wait --limit-rate=500k -i "/Users/pedroferreira/Dropbox (Personal)/MY PROJECTS/CONCURSOS/Data/CEBRASPE/Raw Data/cespe_urls/urls_2005.txt"
+wget --recursive --level=inf --no-parent --ignore-case -e robots=off --no-clobber --wait=1 --random-wait --limit-rate=500k -i "/Users/pedroferreira/Dropbox (Personal)/MY PROJECTS/CONCURSOS/Data/CEBRASPE/Raw Data/cespe_urls/urls_2006.txt"
+wget --recursive --level=inf --no-parent --ignore-case -e robots=off --no-clobber --wait=1 --random-wait --limit-rate=500k -i "/Users/pedroferreira/Dropbox (Personal)/MY PROJECTS/CONCURSOS/Data/CEBRASPE/Raw Data/cespe_urls/urls_2007.txt"
+wget --recursive --level=inf --no-parent --ignore-case -e robots=off --no-clobber --wait=1 --random-wait --limit-rate=500k -i "/Users/pedroferreira/Dropbox (Personal)/MY PROJECTS/CONCURSOS/Data/CEBRASPE/Raw Data/cespe_urls/urls_2008.txt"
+wget --recursive --level=inf --no-parent --ignore-case -e robots=off --no-clobber --wait=1 --random-wait --limit-rate=500k -i "/Users/pedroferreira/Dropbox (Personal)/MY PROJECTS/CONCURSOS/Data/CEBRASPE/Raw Data/cespe_urls/urls_2009.txt"
 
 
 curl -sG "http://web.archive.org/cdx/search/cdx" \
