@@ -1,23 +1,27 @@
-SRC_ROOT="/Users/pedroferreira/Dropbox (Personal)/MY PROJECTS/CONCURSOS/Data/CEBRASPE/Raw Data/www.cespe.unb.br/concursos/_antigos/2008"
-OUT_ROOT="/Users/pedroferreira/Dropbox (Personal)/MY PROJECTS/CONCURSOS/Data/CEBRASPE/Raw Data/text/2008"
+#!/bin/bash
+# Convert PDFs -> text with pdftotext -layout. Paths are relative to this
+# script's location (assumes this file lives in <CEBRASPE>/Code/).
+set -u
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+CEBRASPE="$(cd "$HERE/.." && pwd)"
+RAW="$CEBRASPE/Raw Data"
 
+# --- 1) archive year 2008 (mirrors _antigos/2008 -> text/2008) ---
+SRC_ROOT="$RAW/www.cespe.unb.br/concursos/_antigos/2008"
+OUT_ROOT="$RAW/text/2008"
 mkdir -p "$OUT_ROOT"
-
 find "$SRC_ROOT" -type f -iname "*.pdf" |
 while IFS= read -r pdf; do
-    rel="${pdf#$SRC_ROOT/}"
+    rel="${pdf#"$SRC_ROOT"/}"
     out="$OUT_ROOT/${rel}.txt"
-
     mkdir -p "$(dirname "$out")"
-
     pdftotext -layout "$pdf" "$out"
 done
 
-SRC_ROOT="/Users/pedroferreira/Dropbox (Personal)/MY PROJECTS/CONCURSOS/Data/CEBRASPE/Raw Data/www.cespe.unb.br/concursos"
-OUT_ROOT="/Users/pedroferreira/Dropbox (Personal)/MY PROJECTS/CONCURSOS/Data/CEBRASPE/Raw Data/text/outros"
-
+# --- 2) everything outside the 2002-2008 archive -> text/outros ---
+SRC_ROOT="$RAW/www.cespe.unb.br/concursos"
+OUT_ROOT="$RAW/text/outros"
 mkdir -p "$OUT_ROOT"
-
 find "$SRC_ROOT" \
     \( -path "$SRC_ROOT/2002" \
     -o -path "$SRC_ROOT/2003" \
@@ -28,14 +32,12 @@ find "$SRC_ROOT" \
     -o -path "$SRC_ROOT/2008" \) -prune \
     -o -type f -iname "*.pdf" -print |
 while IFS= read -r pdf; do
-    if stat -f "%Sf" "$pdf" | grep -qi "offline"; then
-        echo "Skipping online-only: $pdf"
-        continue
+    # Skip Dropbox online-only placeholders (macOS only; harmless no-op on Linux/FAS RC)
+    if stat -f "%Sf" "$pdf" 2>/dev/null | grep -qi "offline"; then
+        echo "Skipping online-only: $pdf"; continue
     fi
-
     rel="${pdf#"$SRC_ROOT"/}"
     out="$OUT_ROOT/${rel%.*}.txt"
-
     mkdir -p "$(dirname "$out")"
     echo "Converting: $rel"
     pdftotext -layout "$pdf" "$out"

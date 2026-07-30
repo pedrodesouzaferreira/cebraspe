@@ -24,9 +24,9 @@ from pathlib import Path
 from typing import Iterable
 
 
-ROOT = Path(__file__).resolve().parents[3]
-RAW_ROOT = ROOT / "Data" / "CEBRASPE" / "Raw Data" / "www.cespe.unb.br" / "concursos"
-OUT_ROOT = ROOT / "Data" / "CEBRASPE" / "Intermediate" / "audit_pipeline"
+ROOT = Path(__file__).resolve().parents[1]  # <CEBRASPE> (parent of Code/)
+RAW_ROOT = ROOT / "Raw Data" / "www.cespe.unb.br" / "concursos"
+OUT_ROOT = ROOT / "Intermediate" / "audit_pipeline"
 
 
 FILENAME_RULES = [

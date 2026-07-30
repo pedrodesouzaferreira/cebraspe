@@ -23,9 +23,9 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[3]
-DEFAULT_TEXT_DIR = ROOT / "Data" / "CEBRASPE" / "Raw Data" / "text" / "2006"
-DEFAULT_OUT_DIR = ROOT / "Data" / "CEBRASPE" / "Intermediate" / "classification_2006"
+ROOT = Path(__file__).resolve().parents[1]  # <CEBRASPE> (parent of Code/)
+DEFAULT_TEXT_DIR = ROOT / "Raw Data" / "text" / "2006"
+DEFAULT_OUT_DIR = ROOT / "Intermediate" / "classification_2006"
 
 
 DOC_TYPES = [
@@ -154,7 +154,7 @@ def stable_id(path: Path) -> str:
 def source_pdf_from_text_path(path: Path, text_dir: Path) -> tuple[str, int]:
     rel = path.relative_to(text_dir)
     rel_without_txt = Path(str(rel)[:-4]) if str(rel).lower().endswith(".txt") else rel
-    pdf = ROOT / "Data" / "CEBRASPE" / "Raw Data" / "www.cespe.unb.br" / "concursos" / "_antigos" / "2006" / rel_without_txt
+    pdf = ROOT / "Raw Data" / "www.cespe.unb.br" / "concursos" / "_antigos" / "2006" / rel_without_txt
     return str(pdf), int(pdf.exists())
 
 

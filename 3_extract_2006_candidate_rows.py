@@ -17,9 +17,9 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[3]
-DEFAULT_QUEUE = ROOT / "Data" / "CEBRASPE" / "Intermediate" / "classification_2006" / "classification_2006_result_extraction_queue.csv"
-DEFAULT_OUT_DIR = ROOT / "Data" / "CEBRASPE" / "Intermediate" / "candidate_extraction_2006"
+ROOT = Path(__file__).resolve().parents[1]  # <CEBRASPE> (parent of Code/)
+DEFAULT_QUEUE = ROOT / "Intermediate" / "classification_2006" / "classification_2006_result_extraction_queue.csv"
+DEFAULT_OUT_DIR = ROOT / "Intermediate" / "candidate_extraction_2006"
 
 
 HEADING_RE = re.compile(r"^\s*(?P<num>\d+(?:\.\d+)*)(?:\.\s*)?\s+(?P<title>\S.{1,220}?)\s*$")

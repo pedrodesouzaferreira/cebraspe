@@ -25,9 +25,9 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[3]
-DEFAULT_RAW_ROWS = ROOT / "Data" / "CEBRASPE" / "Intermediate" / "candidate_extraction_2006" / "candidate_rows_2006_raw.csv"
-DEFAULT_OUT_DIR = ROOT / "Data" / "CEBRASPE" / "Intermediate" / "candidate_extraction_2006"
+ROOT = Path(__file__).resolve().parents[1]  # <CEBRASPE> (parent of Code/)
+DEFAULT_RAW_ROWS = ROOT / "Intermediate" / "candidate_extraction_2006" / "candidate_rows_2006_raw.csv"
+DEFAULT_OUT_DIR = ROOT / "Intermediate" / "candidate_extraction_2006"
 
 
 MONTHS = {
