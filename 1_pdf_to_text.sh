@@ -1,44 +1,43 @@
 #!/bin/bash
-# Convert PDFs -> text with pdftotext -layout. Paths are relative to this
-# script's location (assumes this file lives in <CEBRASPE>/Code/).
+# Convert every PDF to text with pdftotext -layout, MIRRORING the raw tree 1:1.
+#
+# For a PDF at   <Raw Data>/<REL>.pdf
+# it writes text <Raw Data>/text/<REL>.pdf.txt
+# so the text/ tree is an exact copy of the raw tree (same folders, same names,
+# just .txt appended). No more 2002-2008/outros split.
+#
+# Idempotent: skips any PDF whose .txt already exists -> re-run anytime to convert
+# only the NEW files. Portable (paths relative to this script's location).
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 CEBRASPE="$(cd "$HERE/.." && pwd)"
 RAW="$CEBRASPE/Raw Data"
+TEXT_ROOT="$RAW/text"
 
-# --- 1) archive year 2008 (mirrors _antigos/2008 -> text/2008) ---
-SRC_ROOT="$RAW/www.cespe.unb.br/concursos/_antigos/2008"
-OUT_ROOT="$RAW/text/2008"
-mkdir -p "$OUT_ROOT"
-find "$SRC_ROOT" -type f -iname "*.pdf" |
-while IFS= read -r pdf; do
-    rel="${pdf#"$SRC_ROOT"/}"
-    out="$OUT_ROOT/${rel}.txt"
+# Source PDF trees to mirror. Add the Cebraspe tree here once step 3 downloads it.
+SRC_ROOTS=(
+  "$RAW/www.cespe.unb.br/concursos"
+  # "$RAW/www.cebraspe.org.br"
+)
+
+command -v pdftotext >/dev/null || { echo "ERROR: pdftotext not found (install poppler-utils / poppler)"; exit 1; }
+
+converted=0; skipped=0
+for SRC in "${SRC_ROOTS[@]}"; do
+  [ -d "$SRC" ] || { echo "skip (absent): $SRC"; continue; }
+  while IFS= read -r -d '' pdf; do
+    rel="${pdf#"$RAW"/}"              # e.g. www.cespe.unb.br/concursos/_antigos/2006/CID/arquivos/x.PDF
+    out="$TEXT_ROOT/${rel}.txt"       # -> text/www.cespe.unb.br/concursos/_antigos/2006/CID/arquivos/x.PDF.txt
+    alt="$TEXT_ROOT/${rel%.*}.txt"    # stripped-extension variant (older 'outros' naming)
+    if [ -f "$out" ] || [ -f "$alt" ]; then skipped=$((skipped+1)); continue; fi
     mkdir -p "$(dirname "$out")"
-    pdftotext -layout "$pdf" "$out"
-done
-
-# --- 2) everything outside the 2002-2008 archive -> text/outros ---
-SRC_ROOT="$RAW/www.cespe.unb.br/concursos"
-OUT_ROOT="$RAW/text/outros"
-mkdir -p "$OUT_ROOT"
-find "$SRC_ROOT" \
-    \( -path "$SRC_ROOT/2002" \
-    -o -path "$SRC_ROOT/2003" \
-    -o -path "$SRC_ROOT/2004" \
-    -o -path "$SRC_ROOT/2005" \
-    -o -path "$SRC_ROOT/2006" \
-    -o -path "$SRC_ROOT/2007" \
-    -o -path "$SRC_ROOT/2008" \) -prune \
-    -o -type f -iname "*.pdf" -print |
-while IFS= read -r pdf; do
-    # Skip Dropbox online-only placeholders (macOS only; harmless no-op on Linux/FAS RC)
-    if stat -f "%Sf" "$pdf" 2>/dev/null | grep -qi "offline"; then
-        echo "Skipping online-only: $pdf"; continue
+    if pdftotext -layout "$pdf" "$out" 2>/dev/null; then
+      converted=$((converted+1))
+      [ $((converted % 200)) -eq 0 ] && echo "  ...converted $converted so far"
+    else
+      echo "  FAILED: $rel"
     fi
-    rel="${pdf#"$SRC_ROOT"/}"
-    out="$OUT_ROOT/${rel%.*}.txt"
-    mkdir -p "$(dirname "$out")"
-    echo "Converting: $rel"
-    pdftotext -layout "$pdf" "$out"
+  done < <(find "$SRC" -type f -iname '*.pdf' -print0)
 done
+echo "Done. Converted (new): $converted | Skipped (already had .txt): $skipped"
+echo "Text tree now mirrors the raw tree under: $TEXT_ROOT"
