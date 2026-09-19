@@ -66,4 +66,4 @@ wget -x -nc -e robots=off -U "Mozilla/5.0" --tries=3 --timeout=30 \
      --wait=0.3 --random-wait --limit-rate=800k -P "$RAW" -i "$OUTLIST" 2>&1 \
   | grep -Ei 'saved|ERROR|404|already there' | tail -0 || true
 echo "Done. Files under: $RAW/cdn.cebraspe.org.br/concursos/"
-echo "Tip: to convert, add \"\$RAW/cdn.cebraspe.org.br\" to SRC_ROOTS in 1_pdf_to_text.sh."
+echo "Tip: to convert, add \"\$RAW/cdn.cebraspe.org.br\" to SRC_ROOTS in 10_pdf_to_text.sh."

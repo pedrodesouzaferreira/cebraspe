@@ -1,5 +1,5 @@
 #!/bin/bash
-# Recover CEBRASPE concursos that 0b_download_cebraspe.sh couldn't get because their
+# Recover CEBRASPE concursos that 02_import_cebraspe.sh couldn't get because their
 # detail API returns HTTP 500 (or lists zero files). Files still exist on the live
 # CDN; we enumerate via Wayback (CDX) and download from the live CDN, falling back
 # to the Wayback snapshot per file. All logic in Python (handles encoding/paths).

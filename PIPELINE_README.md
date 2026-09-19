@@ -71,11 +71,11 @@ So there are **no absolute paths**. Move/clone the whole `CEBRASPE` folder anywh
 layout stays `CEBRASPE/{Code, Raw Data, Intermediate}`. All defaults can still be
 overridden with `--text-dir` / `--queue` / `--raw` / `--out-dir` if needed.
 
-Note: `1_pdf_to_text.sh` uses a macOS `stat -f` test to skip Dropbox online-only
+Note: `10_pdf_to_text.sh` uses a macOS `stat -f` test to skip Dropbox online-only
 files; on Linux/FAS RC that test is a harmless no-op (it just converts everything).
 
 ## Text tree now MIRRORS the raw tree (update)
-`1_pdf_to_text.sh` was rewritten to be a single, idempotent, tree-mirroring
+`10_pdf_to_text.sh` was rewritten to be a single, idempotent, tree-mirroring
 converter. For a PDF at `<Raw Data>/<REL>.pdf` it writes `<Raw Data>/text/<REL>.pdf.txt`,
 so `text/` is an exact copy of the raw tree (no more `2002-2008` + `outros` split).
 Re-run anytime: it skips any PDF that already has a `.txt` (tolerant to both the
@@ -93,19 +93,19 @@ or after the migration.
 ## Import scripts — what downloads what
 Downloaders are grouped under `0*` (recurring imports) plus the pre-2002 pair:
 
-- `0_import.sh` — CESPE legacy site `www.cespe.unb.br`, ALL eras. Part 1: 2002–2019
+- `00_import_cespe.sh` — CESPE legacy site `www.cespe.unb.br`, ALL eras. Part 1: 2002–2019
   from `cespe_urls/urls_YYYY.txt` (idempotent folder check, no Dropbox hydration).
   Part 2: pre-2002 `_antigos/anteriores_2002/…` via Wayback CDX enumeration + live
   download (index pages 500). Flags: FULL=1, SKIP_PRE=1, REFRESH=1.
-- `0b_download_cebraspe.sh` — modern Cebraspe "encerrados" (424) via the JSON APIs;
+- `02_import_cebraspe.sh` — modern Cebraspe "encerrados" (424) via the JSON APIs;
   files come from `cdn.cebraspe.org.br` into `Raw Data/cdn.cebraspe.org.br/...`.
-- `0c_download_cebraspe_gaps.sh` — Cebraspe concursos whose detail API returns
+- `03_import_cebraspe_gaps.sh` — Cebraspe concursos whose detail API returns
   HTTP 500 (or lists no files). Enumerates their files via the Wayback CDX and
   downloads from the live CDN (Wayback snapshot as fallback).
-- `2b_unzip.sh` — unzip the pre-2002 `.zip` bundles (fetched by `0_import` Part 2)
-  before `1_pdf_to_text.sh`.
+- `01_unzip_old.sh` — unzip the pre-2002 `.zip` bundles (fetched by `0_import` Part 2)
+  before `10_pdf_to_text.sh`.
 - OBSOLETE (safe to delete): `0_redownload_gaps.sh` and
-  `2_download_anteriores_2002.sh` — both folded into `0_import.sh`.
+  `2_download_anteriores_2002.sh` — both folded into `00_import_cespe.sh`.
 
-Everything lands in `Raw Data/` mirroring the source tree, and `1_pdf_to_text.sh`
+Everything lands in `Raw Data/` mirroring the source tree, and `10_pdf_to_text.sh`
 then mirrors all of it into `text/`.

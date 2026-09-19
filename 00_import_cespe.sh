@@ -6,7 +6,7 @@
 #   PART 2: pre-2002 archive (_antigos/anteriores_2002/...). The live index pages return 500,
 #           so we enumerate the file list from the Wayback Machine (CDX) and download from the
 #           live site, falling back to the Wayback snapshot per file. Files are mostly .zip
-#           (unzip later with 2b_unzip.sh).
+#           (unzip later with 01_unzip_old.sh).
 #
 # Everything mirrors into Raw Data/www.cespe.unb.br/...  Re-run anytime (idempotent).
 #   FULL=1      -> Part 1 also re-runs wget on already-present concursos (top-up partials)
@@ -87,5 +87,5 @@ echo "===================== SUMMARY ====================="
 echo "Part 1 (2002-2019): downloaded $down | skipped $skip | empty $empty"
 [ "$empty" -gt 0 ] && printf "  still empty (dead/moved):%b\n" "$empties"
 echo "Part 2 (pre-2002) : live/on-disk $p_ok | wayback-recovered $p_rec | dead $p_dead"
-echo "Pre-2002 files are mostly .zip -> run 2b_unzip.sh before 1_pdf_to_text.sh."
+echo "Pre-2002 files are mostly .zip -> run 01_unzip_old.sh before 10_pdf_to_text.sh."
 echo "Recent Cebraspe -> 0b_/0c_ scripts."

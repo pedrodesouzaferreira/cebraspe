@@ -148,40 +148,21 @@ def concurso_selection_type(concurso_id, id_blob, opening_text):
 def stable_id(s): return hashlib.sha1(str(s).encode()).hexdigest()[:16]
 
 def year_and_source(text_path: Path, text_dir: Path):
-    """Derive (year, concurso_id, source_pdf_path) from a text file path.
-
-    Supports BOTH layouts so it works before/after the mirror migration:
-      MIRROR (new): text/www.cespe.unb.br/concursos/_antigos/<year>/<concurso>/...
-                    text/www.cespe.unb.br/concursos/<concurso>/...   (current)
-      OLD:          text/<year>/<concurso>/...    (year in 2002..2008)
-                    text/outros/<concurso>/...    (current)
-    """
     rel = text_path.relative_to(text_dir)
-    parts = list(rel.parts)
-    rel_wo_txt = Path(str(rel)[:-4]) if str(rel).lower().endswith(".txt") else rel
-
-    def yr_from(name):
-        m = re.search(r"(19|20)\d{2}", name); return m.group(0) if m else ""
-
-    # ---- MIRROR layout (path contains 'concursos') ----
-    if "concursos" in parts:
-        i = parts.index("concursos")
-        after = parts[i + 1:]
-        src = CONCURSOS_DIR / Path(*rel_wo_txt.parts[i + 1:])
-        if after and after[0] == "_antigos" and len(after) >= 3:
-            return after[1], after[2], str(src), ""
-        concurso_id = after[0] if after else ""
-        return yr_from(concurso_id), concurso_id, str(src), ""
-
-    # ---- OLD layout ----
+    parts = rel.parts
     top = parts[0]
     concurso_id = parts[1] if len(parts) > 1 else parts[0]
+    rel_wo_txt = Path(str(rel)[:-4]) if str(rel).lower().endswith(".txt") else rel
     if top in ARCHIVE_YEARS:
-        return top, concurso_id, str(CONCURSOS_DIR / "_antigos" / rel_wo_txt), ""
-    if top == "outros":
+        year = top
+        src = CONCURSOS_DIR / "_antigos" / rel_wo_txt
+    elif top == "outros":
+        m = re.search(r"(19|20)\d{2}", concurso_id); year = m.group(0) if m else ""
+        # strip leading "outros/" for source path
         src = CONCURSOS_DIR / Path(*rel_wo_txt.parts[1:])
-        return yr_from(concurso_id), concurso_id, str(src), ""
-    return "", concurso_id, str(CONCURSOS_DIR / rel_wo_txt), ""
+    else:
+        year = ""; src = CONCURSOS_DIR / rel_wo_txt
+    return year, concurso_id, str(src), ""
 
 def compact(t, n=700): return re.sub(r"\s+"," ",t).strip()[:n]
 

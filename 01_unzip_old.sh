@@ -1,5 +1,5 @@
 #!/bin/bash
-# Unzip archived .zip bundles in-place so pdftotext (1_pdf_to_text.sh) can reach the
+# Unzip archived .zip bundles in-place so pdftotext (10_pdf_to_text.sh) can reach the
 # PDFs inside. Each  <dir>/name.zip  is extracted to its own subfolder  <dir>/name/
 # (avoids filename collisions when several zips share a folder). The extracted PDFs
 # then sit in the raw tree and get mirrored into text/ by the converter.
@@ -50,4 +50,4 @@ echo "Skipped (done)   : $skipped"
 echo "Skipped (online) : $online  -> ${SKIPLOG#$RAW/}"
 echo "Failed           : $failed"
 [ "$online" -gt 0 ] && echo ">> Make the online-only zips 'Available Offline' in Dropbox, then re-run."
-echo "Next: run 1_pdf_to_text.sh to convert the extracted PDFs."
+echo "Next: run 10_pdf_to_text.sh to convert the extracted PDFs."
