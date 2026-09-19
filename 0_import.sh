@@ -1,59 +1,50 @@
 #!/bin/bash
-# Download CESPE/CEBRASPE archive. Paths are relative to this script's location
-# (assumes this file lives in <CEBRASPE>/Code/), so it works on any machine.
+# Idempotent importer for the CESPE/CEBRASPE legacy site (cespe.unb.br).
+# Reads every cespe_urls/urls_YYYY.txt (2002-2019), and for EACH concurso cover page:
+#   - checks if its folder already has documents (metadata only -> NO Dropbox hydration)
+#   - if empty/missing, downloads it (wget --recursive, file-level --no-clobber)
+# Re-run anytime: already-downloaded concursos are skipped; gaps are filled.
+# This replaces the old per-year loop AND redownload_gaps.sh.
+#
+#   FULL=1  -> also run wget on already-present concursos (file-level top-up of partials)
+# Paths relative to this script (<CEBRASPE>/Code/). Run locally.
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 CEBRASPE="$(cd "$HERE/.." && pwd)"
-BASE="$CEBRASPE/Raw Data"
-cd "$BASE" || { echo "Cannot cd to $BASE"; exit 1; }
+RAW="$CEBRASPE/Raw Data"
+FULL="${FULL:-0}"
+command -v wget >/dev/null || { echo "ERROR: wget not found"; exit 1; }
+cd "$RAW" || { echo "cannot cd $RAW"; exit 1; }
 
-# This is the base I use to download
-for yr in 2002 2003 2004 2005 2006 2007 2008 2009; do
+has_docs() {  # $1 = concurso dir; true if it holds a real file (not just index.html)
+  [ -d "$1" ] || return 1
+  [ -n "$(find "$1" -type f ! -iname 'index.html' ! -name '.DS_Store' -print -quit 2>/dev/null)" ]
+}
+
+fetch_one() {  # $1 = cover-page URL
   wget --recursive --level=inf --no-parent --ignore-case -e robots=off --no-clobber \
-       --wait=1 --random-wait --limit-rate=500k -i "$BASE/cespe_urls/urls_${yr}.txt"
+       --wait=1 --random-wait --limit-rate=500k "$1" >/dev/null 2>&1
+}
+
+down=0; skip=0; empty=0; empties=""
+for lst in cespe_urls/urls_*.txt; do
+  base="$(basename "$lst")"
+  case "$base" in urls_[0-9][0-9][0-9][0-9].txt) : ;; *) continue ;; esac   # only year lists
+  while IFS= read -r url; do
+    case "$url" in http*) : ;; *) continue ;; esac
+    rest="${url#http://}"; rest="${rest#https://}"; rest="${rest%/}"        # www.cespe.unb.br/concursos/...
+    dir="$RAW/$rest"
+    if has_docs "$dir" && [ "$FULL" != "1" ]; then skip=$((skip+1)); continue; fi
+    echo "  downloading: ${rest#www.cespe.unb.br/concursos/}"
+    fetch_one "$url"
+    if has_docs "$dir"; then down=$((down+1)); else empty=$((empty+1)); empties="$empties\n  $rest"; fi
+  done < "$lst"
 done
 
-# Some files were not downloaded at all.. Here I'm trying to pull them again.
-# Relative paths (from BASE) of the incomplete concurso folders
-FOLDERS=(
-  "www.cespe.unb.br/concursos/_antigos/2002/TCDF1"
-  "www.cespe.unb.br/concursos/_antigos/2002/cbmdf"
-  "www.cespe.unb.br/concursos/_antigos/2003/DIPLOMACIA"
-  "www.cespe.unb.br/concursos/_antigos/2003/anatel"
-  "www.cespe.unb.br/concursos/_antigos/2004/_aneel"
-)
-URLS=(
-  "http://www.cespe.unb.br/concursos/_antigos/2002/TCDF1/"
-  "http://www.cespe.unb.br/concursos/_antigos/2002/cbmdf/"
-  "http://www.cespe.unb.br/concursos/_antigos/2003/DIPLOMACIA/"
-  "http://www.cespe.unb.br/concursos/_antigos/2003/anatel/"
-  "http://www.cespe.unb.br/concursos/_antigos/2004/_aneel/"
-)
-
-echo "=== Step 1: removing the 5 empty/incomplete folders ==="
-for f in "${FOLDERS[@]}"; do
-  if [ -d "$f" ]; then echo "  removing $f"; rm -rf "$f"; fi
-done
-
-echo; echo "=== Step 2: refetching (no --no-clobber; timestamping instead) ==="
-wget --recursive --level=inf --no-parent --ignore-case -e robots=off \
-     --timestamping --wait=1 --random-wait --limit-rate=500k "${URLS[@]}"
-
-echo; echo "=== Step 3: verifying results ==="
-ok=0; bad=0
-for f in "${FOLDERS[@]}"; do
-  if [ -d "$f/arquivos" ] && [ -n "$(ls -A "$f/arquivos" 2>/dev/null)" ]; then
-    n=$(find "$f/arquivos" -type f | wc -l | tr -d ' ')
-    echo "  OK      $f  ($n files in arquivos/)"; ok=$((ok+1))
-  else
-    echo "  STILL EMPTY  $f  (no arquivos/ - URL may no longer serve content)"; bad=$((bad+1))
-  fi
-done
-echo; echo "Done. Fixed: $ok / 5.  Still empty: $bad."
-
-# (Unused) example to list 2002 PDFs from the Wayback Machine
-# curl -sG "http://web.archive.org/cdx/search/cdx" \
-#   --data-urlencode "url=cespe.unb.br/concursos*" \
-#   --data-urlencode "filter=original:.*/2002/.*\.[Pp][Dd][Ff]$" \
-#   --data-urlencode "collapse=urlkey" --data-urlencode "fl=original" \
-#   --data-urlencode "output=text" > "$BASE/cespe_urls/cespe_pdfs_2002.txt"
+echo
+echo "Downloaded/updated : $down"
+echo "Skipped (had docs) : $skip"
+echo "Still empty (dead/moved at source): $empty"
+[ "$empty" -gt 0 ] && printf "%b\n" "$empties"
+echo
+echo "Note: pre-2002 -> 2_download_anteriores_2002.sh ; recent Cebraspe-only -> 3_/3b_ scripts."
