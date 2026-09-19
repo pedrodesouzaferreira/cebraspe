@@ -87,8 +87,9 @@ if [ "$run2" = 1 ]; then
       cp="${cp%/}"                                      # anteriores_2002/1997/BACEN_Analista
       arqurl="http://www.cespe.unb.br/concursos/_antigos/${cp}/Arquivos/"
       ldir="$RAW/www.cespe.unb.br/concursos/_antigos/${cp}/Arquivos"
-      if has_docs "$ldir" && [ "$FULL" != "1" ]; then p_done=$((p_done+1)); continue; fi
       printf "  %s ... " "${cp#anteriores_2002/}"
+      # always top-up: --no-clobber skips files already on disk, fetches the missing ones
+      # (a concurso may have only Indice.txt from an earlier run; this completes it)
       wget --recursive --no-parent --level=inf --ignore-case -e robots=off --no-clobber \
            --wait=0.3 --random-wait --limit-rate=500k -P "$RAW" "$arqurl" >/dev/null 2>&1
       if has_docs "$ldir"; then
@@ -104,7 +105,7 @@ fi
 echo "===================== SUMMARY (PART=$PART) ====================="
 [ "$run1" = 1 ] && { echo "Part 1 (2002-2019): downloaded $down | skipped $skip | empty $empty";
   [ "$empty" -gt 0 ] && printf "  still empty (dead/moved):%b\n" "$empties"; }
-[ "$run2" = 1 ] && echo "Part 2 (pre-2002) : downloaded $p_ok | already-had $p_done | empty $p_empty"
+[ "$run2" = 1 ] && echo "Part 2 (pre-2002) : concursos with files $p_ok | empty $p_empty"
 [ "$run2" = 1 ] && [ "$p_empty" -gt 0 ] && printf "  empty (live dir gone, try Wayback):%b\n" "$p_empties"
 [ "$run2" = 1 ] && echo "Pre-2002 files are mostly .zip -> run 01_unzip_old.sh before 10_pdf_to_text.sh."
 echo "Recent Cebraspe -> 02_import_cebraspe.sh / 03_import_cebraspe_gaps.sh."
