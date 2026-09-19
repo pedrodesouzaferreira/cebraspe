@@ -3,10 +3,11 @@
 #
 #   PART 1: 2002-2019 concursos, from cespe_urls/urls_YYYY.txt (cover-page recursive wget).
 #           Skips concursos that already have docs (metadata check -> NO Dropbox hydration).
-#   PART 2: pre-2002 archive (_antigos/anteriores_2002/...). The live index pages return 500,
-#           so we enumerate the file list from the Wayback Machine (CDX) and download from the
-#           live site, falling back to the Wayback snapshot per file. Files are mostly .zip
-#           (unzip later with 01_unzip_old.sh).
+#   PART 2: pre-2002 archive (_antigos/anteriores_2002/...). The live index/cover pages
+#           return 500, but each concurso's Arquivos/ folder still serves an IIS directory
+#           listing. We get the concurso NAMES from the Wayback Machine (CDX) and then
+#           recursive-wget each live Arquivos/ listing (complete; Wayback file lists are not).
+#           Files are mostly .zip (unzip later with 01_unzip_old.sh).
 #
 # Everything mirrors into Raw Data/www.cespe.unb.br/...  Re-run anytime (idempotent).
 #
@@ -64,40 +65,46 @@ if [ "$run1" = 1 ]; then
   echo
 fi
 
-p_ok=0; p_rec=0; p_dead=0; LIST="$RAW/cespe_urls/urls_anteriores_2002_files.txt"
+p_ok=0; p_done=0; p_empty=0; p_empties=""; CLIST="$RAW/cespe_urls/anteriores_2002_concursos.txt"
 if [ "$run2" = 1 ]; then
   echo "=== PART 2: pre-2002 archive (_antigos/anteriores_2002) ==="
   if ! command -v curl >/dev/null; then
     echo "  curl not found -> skipping pre-2002 (install curl to enable)"
   else
-    if [ "$REFRESH" = "1" ] || [ ! -s "$LIST" ]; then
-      echo "  enumerating file list from Wayback CDX ..."
+    # Enumerate the CONCURSO folders from Wayback CDX (dir names are archived even
+    # when the individual files are not). We then download each concurso's live
+    # Arquivos/ directory listing (IIS), which lists ALL files -- Wayback file lists
+    # are incomplete, so we only use it for the folder names.
+    if [ "$REFRESH" = "1" ] || [ ! -s "$CLIST" ]; then
+      echo "  enumerating concursos from Wayback CDX ..."
       CDX="https://web.archive.org/cdx/search/cdx?url=cespe.unb.br/concursos/_antigos/anteriores_2002&matchType=prefix&collapse=urlkey&fl=original&output=text"
-      curl -sG "$CDX" \
-        | sed -E 's/:80\//\//' | sed -E 's#/concursoS/#/concursos/#g' \
-        | grep -iE '/[^/]+\.[a-z0-9]{2,4}$' | grep -viE '\.asp($|\?)|/default\.' \
-        | sort -u > "$LIST"
+      curl -sG "$CDX" | sed -E 's#/concursoS/#/concursos/#g' \
+        | grep -oiE 'anteriores_2002/[0-9]{4}/[^/]+/' | sort -u > "$CLIST"
     fi
-    echo "  $(grep -c . "$LIST" 2>/dev/null || echo 0) files listed (${LIST#$RAW/})"
-    echo "  downloading from live cespe.unb.br (mirroring) ..."
-    wget -x --timestamping --tries=3 --wait=0.5 --random-wait --limit-rate=500k \
-         -e robots=off -P "$RAW" -i "$LIST" 2>/dev/null || true
-    echo "  Wayback fallback for anything missing ..."
-    while IFS= read -r url; do
-      [ -z "$url" ] && continue
-      rel="${url#http://}"; rel="${rel#https://}"; dst="$RAW/$rel"
-      if [ -s "$dst" ]; then p_ok=$((p_ok+1)); continue; fi
-      mkdir -p "$(dirname "$dst")"
-      if wget -q -O "$dst" "https://web.archive.org/web/2id_/$url" && [ -s "$dst" ]; then
-        p_rec=$((p_rec+1)); else rm -f "$dst" 2>/dev/null; p_dead=$((p_dead+1)); fi
-    done < "$LIST"
+    echo "  $(grep -c . "$CLIST" 2>/dev/null || echo 0) concursos (${CLIST#$RAW/})"
+    while IFS= read -r cp; do
+      [ -z "$cp" ] && continue
+      cp="${cp%/}"                                      # anteriores_2002/1997/BACEN_Analista
+      arqurl="http://www.cespe.unb.br/concursos/_antigos/${cp}/Arquivos/"
+      ldir="$RAW/www.cespe.unb.br/concursos/_antigos/${cp}/Arquivos"
+      if has_docs "$ldir" && [ "$FULL" != "1" ]; then p_done=$((p_done+1)); continue; fi
+      printf "  %s ... " "${cp#anteriores_2002/}"
+      wget --recursive --no-parent --level=inf --ignore-case -e robots=off --no-clobber \
+           --wait=0.3 --random-wait --limit-rate=500k -P "$RAW" "$arqurl" >/dev/null 2>&1
+      if has_docs "$ldir"; then
+        n=$(find "$ldir" -type f ! -iname 'index.html' ! -name '.DS_Store' 2>/dev/null | wc -l | tr -d ' ')
+        p_ok=$((p_ok+1)); echo "OK ($n files)"
+      else
+        p_empty=$((p_empty+1)); p_empties="$p_empties\n  $cp"; echo "EMPTY (live dir gone)"
+      fi
+    done < "$CLIST"
   fi
   echo
 fi
-
 echo "===================== SUMMARY (PART=$PART) ====================="
 [ "$run1" = 1 ] && { echo "Part 1 (2002-2019): downloaded $down | skipped $skip | empty $empty";
   [ "$empty" -gt 0 ] && printf "  still empty (dead/moved):%b\n" "$empties"; }
-[ "$run2" = 1 ] && echo "Part 2 (pre-2002) : live/on-disk $p_ok | wayback-recovered $p_rec | dead $p_dead"
+[ "$run2" = 1 ] && echo "Part 2 (pre-2002) : downloaded $p_ok | already-had $p_done | empty $p_empty"
+[ "$run2" = 1 ] && [ "$p_empty" -gt 0 ] && printf "  empty (live dir gone, try Wayback):%b\n" "$p_empties"
 [ "$run2" = 1 ] && echo "Pre-2002 files are mostly .zip -> run 01_unzip_old.sh before 10_pdf_to_text.sh."
 echo "Recent Cebraspe -> 02_import_cebraspe.sh / 03_import_cebraspe_gaps.sh."
