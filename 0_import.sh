@@ -35,9 +35,14 @@ for lst in cespe_urls/urls_*.txt; do
     rest="${url#http://}"; rest="${rest#https://}"; rest="${rest%/}"        # www.cespe.unb.br/concursos/...
     dir="$RAW/$rest"
     if has_docs "$dir" && [ "$FULL" != "1" ]; then skip=$((skip+1)); continue; fi
-    echo "  downloading: ${rest#www.cespe.unb.br/concursos/}"
+    printf "  downloading %s ... " "${rest#www.cespe.unb.br/concursos/}"
     fetch_one "$url"
-    if has_docs "$dir"; then down=$((down+1)); else empty=$((empty+1)); empties="$empties\n  $rest"; fi
+    if has_docs "$dir"; then
+      n=$(find "$dir" -type f ! -iname 'index.html' ! -name '.DS_Store' 2>/dev/null | wc -l | tr -d ' ')
+      down=$((down+1)); echo "OK ($n files) -> ${dir#$RAW/}/"
+    else
+      empty=$((empty+1)); empties="$empties\n  $rest"; echo "EMPTY (dead/moved at source)"
+    fi
   done < "$lst"
 done
 
@@ -47,4 +52,4 @@ echo "Skipped (had docs) : $skip"
 echo "Still empty (dead/moved at source): $empty"
 [ "$empty" -gt 0 ] && printf "%b\n" "$empties"
 echo
-echo "Note: pre-2002 -> 2_download_anteriores_2002.sh ; recent Cebraspe-only -> 3_/3b_ scripts."
+echo "Note: pre-2002 -> 2_download_anteriores_2002.sh ; recent Cebraspe -> 0b_/0c_ scripts."
