@@ -25,12 +25,10 @@ USO
 recorte, linhas com human=1 sao puladas (mantidas intactas); as demais sao
 (re)classificadas.
 
-QUALIDADE (validado contra 3 concursos-gold, 124 arquivos, + auditoria manual das
-300 primeiras linhas)
-    has_cpf ~100%   has_scores ~99%   has_names ~98%   type ~91%   subtype ~61%
-    Sinal central: barras "/" por KB e numeros de inscricao dizem se e' lista de
-    candidatos. type/subtype ainda tem erros -> revise e va marcando human=1 no que
-    corrigir; quanto mais voce corrigir, melhor da pra afinar as regras depois.
+QUALIDADE (validado contra 3 concursos classificados a mao, 124 arquivos)
+    has_cpf   ~100%   has_scores ~95%   has_names ~90%
+    type/subtype: best-effort (~2/3). Revise e va marcando human=1 no que corrigir;
+    quanto mais voce corrigir, melhor da pra afinar as regras depois.
 """
 import csv, os, re, sys, unicodedata
 
@@ -48,13 +46,14 @@ CLASS_COLS = ["type","subtype","has_names","has_cpf","has_scores"]
 CPF   = re.compile(r'\b\d{3}\.\d{3}\.\d{3}-\d{2}\b')
 CPFM  = re.compile(r'[\*x]{2,3}\.?\d{3}\.\d{3}-?[\*x]{2}', re.I)   # cpf mascarado ***.123.456-**
 SCORE = re.compile(r'\b\d{1,3}[.,]\d{2}\b')                        # nota tipo 85,50 ou 85.50
-INSCR = re.compile(r'\b\d{6,9}\b')                                 # numero de inscricao (candidatos)
-ABCDE = re.compile(r'(?:\b[A-E]\b[ \t]+){5,}')                     # linha de gabarito: A B C D E ...
+NAME  = re.compile(r'\b[A-ZÁÂÃÉÊÍÓÔÕÚÜÇ][a-zá-úâ-ûã-õ]+'
+                   r'(?:\s+(?:d[aeo]s?|e|[A-ZÁÂÃÉÊÍÓÔÕÚÜÇ][a-zá-úâ-ûã-õ]+)){1,5}'
+                   r'\s+[A-ZÁÂÃÉÊÍÓÔÕÚÜÇ][a-zá-úâ-ûã-õ]+\b')
 
-# limiares calibrados contra 3 concursos-gold + auditoria manual das 300 primeiras linhas
-SLASH_PER_KB = 10     # barras "/" por KB: listas de candidatos usam " / " entre registros
-INSCR_MIN    = 30     # nº de numeros de inscricao (6-9 digitos) p/ ser "lista de candidatos"
-SCORE_MIN    = 60     # nº de notas p/ has_scores (so vale se ja for lista)
+# limiares calibrados no gold
+SLASH_PER_KB = 6      # listas compactadas de candidatos usam " / " entre registros
+NAME_MIN     = 40     # nº de nomes-completos p/ considerar "lista de nomes"
+SCORE_MIN    = 60     # nº de notas p/ has_scores (so vale se ja tem nomes)
 CPF_MIN      = 6      # nº de CPFs p/ has_cpf
 
 def norm(s):
@@ -68,76 +67,64 @@ def txt_path(rel):
     return None
 
 def analyze(fname, text):
-    """Retorna (type, subtype, has_names, has_cpf, has_scores).
-
-    Regra central (validada com a auditoria do usuario): o numero de barras por KB
-    e a quantidade de numeros de inscricao dizem se o arquivo e' uma LISTA DE
-    CANDIDATOS (resultado/inscricao). Poucas barras => NAO e' resultado. Alem disso,
-    'codigos' de texto identificam o tipo: 'torna publico/publica' => edital;
-    'em razao de erro material' => edital/alteracao; 'sera aplicada no dia'/'duracao
-    de' => edital/local; 'modelo de formulario'/'a banca examinadora' => outros.
-    """
-    F = norm(fname); n = len(text) or 1
-    title = norm(text[:800])            # titulo do documento (primeiros ~800 chars)
-    head  = norm(text[:8000])           # cabecalho maior p/ 'codigos' de texto
-    body  = text[:2_000_000]
+    """Retorna (type, subtype, has_names, has_cpf, has_scores)."""
+    F = norm(fname); H = norm(text[:8000]); n = len(text) or 1
     slash_kb = text.count("/") / (n / 1000.0)
-    insc  = len(INSCR.findall(body))
+    body = text[:2_000_000]
+    nmatch = len(NAME.findall(body))
     smatch = len(SCORE.findall(body))
     cpf    = len(CPF.findall(text)) + len(CPFM.findall(text))
-    abcde  = bool(ABCDE.search(text[:20000]))
-    is_list = slash_kb >= SLASH_PER_KB or insc >= INSCR_MIN
+    namelist = slash_kb >= SLASH_PER_KB or nmatch >= NAME_MIN
 
-    def hf(*k): return any(x in F for x in k)       # no nome do arquivo
-    def ht(*k): return any(x in title for x in k)   # no titulo
-    def hh(*k): return any(x in head for x in k)    # no cabecalho
+    def hf(*k): return any(x in F for x in k)   # no nome do arquivo
+    def hh(*k): return any(x in H for x in k)   # no inicio do conteudo
 
-    typ, sub = "outros", ""
+    typ, sub = None, ""
     # 1) gabarito / padrao de resposta / espelho
-    if hf("GABARIT","GAB_","PADRAO_DE_RESPOSTA","PADRAORESPOSTA","ESPELHO") \
-       or ht("PADRAO DE RESPOSTA","GABARITO OFICIAL","ESPELHO DE PROVA") \
-       or (hh("GABARITO") and abcde) or ("JUSTIFICATIV" in F and "GABARITO" in head):
+    if hf("GABARIT","PADRAO_DE_RESPOSTA","PADROES","ESPELHO","JUSTIFICATIV") \
+       or hh("PADRAO DE RESPOSTA","GABARITO OFICIAL","ESPELHO DE PROVA"):
         typ = "gabarito"
-        sub = "discursiva" if hf("DISC","REDACAO","PECA","DISSERT") \
-              or ht("PADRAO DE RESPOSTA","DISCURSIV","PECA","QUESTAO","DISSERTA") else "objetiva"
-        if hf("JUSTIFICATIV") or ht("JUSTIFICATIVAS DE ALTERAC","ALTERACAO DO GABARITO"): sub = "alteracao"
-    # 2) outros por 'codigo' (formulario, requerimento, capa de recurso, banca)  -- antes de edital
-    elif hh("MODELO DE FORMULARIO","A BANCA EXAMINADORA") \
-         or hf("CAPA_DE_RECURSO","REQUERIMENTO","FORMULARIO","MODELO"):
-        typ = "outros"
-    # 3) candidato x vaga
-    elif hf("DEMANDA") or ht("CANDIDATOS POR VAGA","DEMANDA DE CANDIDATOS"):
+        sub = "discursiva" if hf("DISC","RESPOSTA","REDACAO","ESPELHO","JUSTIF") \
+                              or hh("DISCURSIV","PADRAO DE RESPOSTA") else "objetiva"
+        if hf("DEFINITIV","ALTERAC","RETIFIC"): sub = "alteracao"
+    # 2) candidato x vaga
+    elif hf("DEMANDA") or (hh("CANDIDATO") and hh("POR VAGA","CONCORRENCIA")):
         typ = "candidatovaga"
-    # 4) LISTA de candidatos -> resultado (ou inscricao)  -- muitas barras / nº de inscricao
-    elif is_list:
-        if hf("_INSC","RES_PROV_INSC","RES_FINAL_INSC","REL_FINAL_INSC","REL_PROV_INSC") and smatch < SCORE_MIN:
-            typ = "inscricao"; sub = "final" if hf("FINAL") else "provisorio"
-        else:
-            typ = "resultado"; sub = "provisorio"
-            if hf("FINAL") or ht("RESULTADO FINAL","RELACAO FINAL"): sub = "final"
-            if hf("PROV") or ht("PROVISORI","RELACAO PROVISORIA"): sub = "provisorio"
-            # subtipos por sufixo do nome do arquivo (regras do usuario)
-            if hf("_AE","_PCD","DEFIC"): sub = "deficiencia"
-            if hf("COTAS","NEGR","RACIAL","AUTODECL","HETERO"): sub = "autodeclaracao"
-            if hf("ISEN"): sub = "isencao"
-    # 5) edital por 'codigo' de texto / nome  -- so chega aqui se NAO for lista
-    elif hh("TORNA PUBLIC") or ht("EDITAL N","EDITAL No","EDITAL Nº") \
-         or hf("ED_","EDITAL","EXTRATO","COMUNICADO","AVISO","PORTARIA") \
-         or ht("COMUNICADO","AVISO","PORTARIA"):
-        typ = "edital"; sub = "outro"
-        if hf("ABERTURA") or ht("ABERTURA"): sub = "abertura"
-        elif hf("RETIF","_RET","ALTER") or hh("EM RAZAO DE ERRO MATERIAL","RETIFICA","ALTERAC"): sub = "alteracao"
-        elif hf("BANCA") or ht("BANCA EXAMINADORA"): sub = "banca"
-        elif hf("LOCAI","LOCAL","HORARIO") or hh("SERA APLICADA NO DIA","DURACAO DE"): sub = "local"
-    # 6) prova (caderno) -- por ultimo: 'prova objetiva' aparece citada em editais/resultados
-    elif ht("PROVA OBJETIVA","PROVA DISCURSIVA","PROVA ESCRITA","PROVA SUBJETIVA","PROVAS SUBJETIVAS") \
-         or re.search(r'_\d{2,3}_(0\d|DISC|P\d)\b', F) or F.endswith("_DISC") \
-         or ht("MARQUE, PARA CADA","ITENS A SEGUIR","FOLHA DE RESPOSTAS"):
+    # 3) inscricao
+    elif hf("INSC") or hh("DEFERIMENTO DE INSCRICAO","PEDIDOS DE INSCRICAO"):
+        typ = "inscricao"
+        sub = "final" if hf("FINAL","DEFINITIV") or hh("FINAL","DEFINITIV") else "provisorio"
+    # 4) resultado — por lista de nomes OU por palavra-chave
+    elif namelist or hf("RES_","RESULT","_RES_","CLASSIF","CONVOCA","HOMOLOG","APROVAD","DIVULG") \
+         or hh("RESULTADO","CLASSIFICAD","CLASSIFICACAO","APROVADOS","CONVOCAC","HOMOLOGAC"):
+        typ = "resultado"
+    # 5) prova
+    elif hf("PROVA","CADERNO") or re.search(r'_\d{2,3}_(0\d|DISC)\b', F) or F.endswith("_DISC") \
+         or hh("PROVA OBJETIVA","CADERNO DE PROVA","PROVA DISCURSIVA"):
         typ = "prova"
-        sub = "discursiva" if hf("DISC","REDACAO","_P2","_P3","_P4") \
-              or ht("DISCURSIV","SUBJETIV","REDACAO") else "objetiva"
+        sub = "discursiva" if hf("DISC","REDACAO") or hh("DISCURSIV","REDACAO") else "objetiva"
+    # 6) edital / comunicado / aviso / portaria
+    elif hf("ED_","EDITAL","COMUNICADO","AVISO","_RET","RET_","ABERTURA","BANCA","LOCAI","PORTARIA","PRORROG") \
+         or hh("EDITAL N","COMUNICADO","PORTARIA N","AVISO"):
+        typ = "edital"
+    else:
+        typ = "outros"
 
-    hn = 1 if is_list else 0
+    if typ == "resultado" and not sub:
+        sub = "provisorio"
+        if hf("FINAL","DEFINITIV") or hh("RESULTADO FINAL","RESULTADO DEFINITIV","DEFINITIVO"): sub = "final"
+        if hf("PROVISORI","PRELIMIN") or hh("PROVISORI","PRELIMINAR"): sub = "provisorio"
+        if hf("DEFIC","PCD","PNE") or hh("DEFICIENC"): sub = "deficiencia"
+        if hf("AUTODECL","NEGR","RACIAL","COTA","HETERO") or hh("AUTODECLARA","HETEROIDENT"): sub = "autodeclaracao"
+        if hf("ISEN") or hh("ISENCAO","ISENTO"): sub = "isencao"
+    if typ == "edital" and not sub:
+        sub = "outro"
+        if hf("ABERTURA") or hh("ABERTURA"): sub = "abertura"
+        elif hf("_RET","RET_","RETIF","ALTER") or hh("RETIFICA","ALTERAC"): sub = "alteracao"
+        elif hf("BANCA") or hh("BANCA EXAMINADORA"): sub = "banca"
+        elif hf("LOCAI","HORARIO") or hh("LOCAIS DE PROVA"): sub = "local"
+
+    hn = 1 if namelist else 0
     hs = 1 if (hn and smatch >= SCORE_MIN) else 0
     hc = 1 if cpf >= CPF_MIN else 0
     return typ, sub, hn, hc, hs
