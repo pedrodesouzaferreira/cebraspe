@@ -165,7 +165,18 @@ def main():
         print(f"Coluna 'human' criada: {sum(r['human']=='1' for r in rows)} linhas marcadas "
               f"human=1 (suas classificacoes manuais).")
 
+    def save():
+        with open(CSV, "w", newline="", encoding="utf-8") as f:
+            w = csv.DictWriter(f, fieldnames=fieldnames)
+            w.writeheader()
+            for r in rows:
+                w.writerow({c: r.get(c, "") for c in fieldnames})
+
     scope = rows if limit is None else rows[:limit]
+    todo = sum(1 for r in scope if r.get("human","0") != "1")   # quantas serao classificadas
+    print(f"Escopo: {'TODAS' if limit is None else 'primeiras '+str(limit)} linhas "
+          f"({len(scope)}); a classificar: {todo}. (checkpoint a cada 5000)")
+    CHECKPOINT = 5000
     classified = skipped_human = no_txt = 0
     for r in scope:
         if r.get("human","0") == "1":
@@ -189,18 +200,18 @@ def main():
             if "sem_txt" not in note:
                 r["notes"] = (note + ("; " if note else "") + "sem_txt").strip("; ")
             r["human"] = "0"; no_txt += 1; classified += 1
-            continue
-        typ, sub, hn, hc, hs = analyze(r["arquivo"], text)
-        r["type"], r["subtype"] = typ, sub
-        r["has_names"], r["has_cpf"], r["has_scores"] = str(hn), str(hc), str(hs)
-        r["human"] = "0"
-        classified += 1
+        else:
+            typ, sub, hn, hc, hs = analyze(r["arquivo"], text)
+            r["type"], r["subtype"] = typ, sub
+            r["has_names"], r["has_cpf"], r["has_scores"] = str(hn), str(hc), str(hs)
+            r["human"] = "0"
+            classified += 1
+        if classified % 500 == 0:
+            print(f"  ... {classified}/{todo} classificadas", flush=True)
+        if classified % CHECKPOINT == 0:
+            save()   # checkpoint: nao perde progresso se interromper
 
-    with open(CSV, "w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=fieldnames)
-        w.writeheader()
-        for r in rows:
-            w.writerow({c: r.get(c, "") for c in fieldnames})
+    save()
 
     print(f"Escopo: {'TODAS' if limit is None else 'primeiras '+str(limit)} linhas ({len(scope)}).")
     print(f"  classificadas pelo codigo : {classified}  (das quais {no_txt} sem txt -> so tipo)")
