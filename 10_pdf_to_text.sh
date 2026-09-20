@@ -1,14 +1,18 @@
 #!/bin/bash
-# Convert documents to text, MIRRORING the raw tree 1:1:
-#   <Raw Data>/<REL>.<ext>  ->  <Raw Data>/text/<REL>.<ext>.txt
+# Convert every PDF to text with pdftotext -layout, MIRRORING the raw tree 1:1.
+#   PDF  <Raw Data>/<REL>.pdf   ->   text  <Raw Data>/text/<REL>.pdf.txt
 #
-#   .pdf                    -> pdftotext -layout
-#   .doc .docx .rtf .htm .html -> textutil (macOS)  ||  libreoffice  ||  pandoc
+# Idempotent: skips PDFs that already have a .txt (either naming convention).
 #
-# Idempotent: skips files that already have a .txt (either naming convention).
-# Dropbox online-only: force-hydrates each file (cat >/dev/null) before reading, so
-# the file is fully downloaded; logs and skips anything that still can't be read.
-# EVICT=1 tries to evict each file after converting (best-effort, macOS brctl).
+# IMPORTANT (Dropbox online-only): a PDF must be physically on disk to be read.
+# macOS reports the full size for "online-only" files and pdftotext's random seeks
+# do NOT force a full download, so it fails. We therefore FORCE-HYDRATE each file
+# by reading it whole (cat >/dev/null) before converting -- this makes Dropbox
+# download it synchronously. Already-local files: the cat is just a fast read.
+#
+# This means the converter WILL download the PDFs it converts (unavoidable). To
+# reclaim space afterwards, re-set the raw folder to "Online only" in Dropbox.
+# Set EVICT=1 to try evicting each file right after converting (best-effort).
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 CEBRASPE="$(cd "$HERE/.." && pwd)"
@@ -23,60 +27,30 @@ SRC_ROOTS=(
 command -v pdftotext >/dev/null || { echo "ERROR: pdftotext not found (brew install poppler)"; exit 1; }
 : > "$SKIPLOG"
 
-# Convert a doc/rtf/html file ($1) to plain text at ($2). Tries several backends.
-convert_doc() {
-  local s="$1" o="$2" tmp made
-  if command -v textutil >/dev/null 2>&1; then
-    textutil -convert txt -output "$o" "$s" >/dev/null 2>&1 && [ -s "$o" ] && return 0
-  fi
-  if command -v libreoffice >/dev/null 2>&1; then
-    tmp="$(mktemp -d)"
-    libreoffice --headless --convert-to txt:Text --outdir "$tmp" "$s" >/dev/null 2>&1
-    made="$(ls "$tmp"/*.txt 2>/dev/null | head -1)"
-    [ -n "$made" ] && mv "$made" "$o" 2>/dev/null; rm -rf "$tmp"
-    [ -s "$o" ] && return 0
-  fi
-  if command -v pandoc >/dev/null 2>&1; then
-    pandoc -t plain -o "$o" "$s" >/dev/null 2>&1 && [ -s "$o" ] && return 0
-  fi
-  return 1
-}
-
 converted=0; skipped=0; online=0; failed=0
 for SRC in "${SRC_ROOTS[@]}"; do
   [ -d "$SRC" ] || { echo "skip (absent): $SRC"; continue; }
-  while IFS= read -r -d '' f; do
-    rel="${f#"$RAW"/}"
+  while IFS= read -r -d '' pdf; do
+    rel="${pdf#"$RAW"/}"
     out="$TEXT_ROOT/${rel}.txt"; alt="$TEXT_ROOT/${rel%.*}.txt"
     if [ -f "$out" ] || [ -f "$alt" ]; then skipped=$((skipped+1)); continue; fi
-    cat "$f" >/dev/null 2>&1                        # force Dropbox to fully download it
-    if [ ! -s "$f" ]; then online=$((online+1)); printf '%s\n' "$rel" >> "$SKIPLOG"; continue; fi
-    ext="$(printf '%s' "${f##*.}" | tr 'A-Z' 'a-z')"
+    cat "$pdf" >/dev/null 2>&1                      # force Dropbox to fully download it
+    if [ ! -s "$pdf" ] || [ "$(head -c 5 "$pdf" 2>/dev/null)" != "%PDF-" ]; then
+      online=$((online+1)); printf '%s\n' "$rel" >> "$SKIPLOG"; continue
+    fi
     mkdir -p "$(dirname "$out")"
-    ok=0
-    case "$ext" in
-      pdf)
-        if [ "$(head -c 5 "$f" 2>/dev/null)" != "%PDF-" ]; then
-          online=$((online+1)); printf '%s\n' "$rel" >> "$SKIPLOG"; continue
-        fi
-        pdftotext -layout "$f" "$out" 2>/dev/null && ok=1 ;;
-      doc|docx|rtf|htm|html)
-        convert_doc "$f" "$out" && ok=1 ;;
-    esac
-    if [ "$ok" = 1 ]; then
+    if pdftotext -layout "$pdf" "$out" 2>/dev/null; then
       converted=$((converted+1))
       [ $((converted % 200)) -eq 0 ] && echo "  ...converted $converted"
-      [ "$EVICT" = "1" ] && command -v brctl >/dev/null && brctl evict "$f" 2>/dev/null
+      [ "$EVICT" = "1" ] && command -v brctl >/dev/null && brctl evict "$pdf" 2>/dev/null
     else
-      failed=$((failed+1)); rm -f "$out" 2>/dev/null; echo "  FAILED ($ext): $rel"
+      failed=$((failed+1)); echo "  FAILED (real pdf error): $rel"
     fi
-  done < <(find "$SRC" -type f \( -iname '*.pdf' -o -iname '*.doc' -o -iname '*.docx' \
-                                 -o -iname '*.rtf' -o -iname '*.htm' -o -iname '*.html' \) \
-                 ! -iname 'index.html' -print0)
+  done < <(find "$SRC" -type f -iname '*.pdf' -print0)
 done
 echo
 echo "Converted (new)          : $converted"
 echo "Skipped (already had txt): $skipped"
 echo "Could not hydrate/read   : $online  -> ${SKIPLOG#$RAW/}"
-echo "Failed (converter error) : $failed"
-[ "$online" -gt 0 ] && echo ">> 'Could not hydrate' = Dropbox paused/offline or file removed. Resume Dropbox and re-run."
+echo "Failed (real pdf error)  : $failed"
+[ "$online" -gt 0 ] && echo ">> 'Could not hydrate' usually means Dropbox is paused/offline. Resume Dropbox and re-run."
