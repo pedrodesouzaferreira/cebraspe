@@ -19,9 +19,9 @@ Entao, para cada registro:
 Arquivos sem barras sao quebrados por linha e tratados igual. Nomes sao deduplicados
 por arquivo.
 
-SAIDA
------
-Metadata/nomes_extraidos.csv  (sempre)  e  .parquet (se pandas/pyarrow instalado).
+SAIDA (em Clean Data/)
+----------------------
+Clean Data/nomes_extraidos.parquet   e   Clean Data/nomes_extraidos.csv
 Colunas: name, concurso, file, year, directory
   name      = nome do candidato
   concurso  = concurso_id
@@ -40,8 +40,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 CEBRASPE = os.path.dirname(HERE)
 CSV_IN  = os.path.join(CEBRASPE, "Metadata", "concursos_arquivos.csv")
 TEXT    = os.path.join(CEBRASPE, "Raw Data", "text")
-OUT_CSV = os.path.join(CEBRASPE, "Metadata", "nomes_extraidos.csv")
-OUT_PQ  = os.path.join(CEBRASPE, "Metadata", "nomes_extraidos.parquet")
+OUTDIR  = os.path.join(CEBRASPE, "Clean Data")
+OUT_CSV = os.path.join(OUTDIR, "nomes_extraidos.csv")
+OUT_PQ  = os.path.join(OUTDIR, "nomes_extraidos.parquet")
 
 INSCR = re.compile(r'\b\d{6,9}\b')                 # numero de inscricao do candidato
 CONN  = {"DE","DA","DO","DAS","DOS","E","DI","DEL","DELLA","DELLO","VAN","VON","Y","DU","D"}
@@ -105,6 +106,7 @@ def main():
         try: limit = int(sys.argv[1])
         except ValueError: print("Uso: python3 20_extract_names.py [N|all]"); sys.exit(2)
 
+    os.makedirs(OUTDIR, exist_ok=True)
     with open(CSV_IN, newline="", encoding="utf-8") as f:
         targets = [r for r in csv.DictReader(f) if r.get("has_names") == "1"]
     if limit is not None:
@@ -143,13 +145,19 @@ def main():
     print(f"Total de nomes (linhas): {total_names}")
     print(f"CSV: {OUT_CSV}")
 
-    # parquet opcional (se pandas/pyarrow disponiveis)
+    # parquet (em blocos, baixa memoria) via pyarrow
     try:
-        import pandas as pd
-        pd.read_csv(OUT_CSV, dtype=str).to_parquet(OUT_PQ, index=False)
+        import pandas as pd, pyarrow as pa, pyarrow.parquet as pq
+        writer = None
+        for chunk in pd.read_csv(OUT_CSV, dtype=str, chunksize=200_000, keep_default_na=False):
+            tbl = pa.Table.from_pandas(chunk, preserve_index=False)
+            if writer is None:
+                writer = pq.ParquetWriter(OUT_PQ, tbl.schema, compression="snappy")
+            writer.write_table(tbl)
+        if writer: writer.close()
         print(f"Parquet: {OUT_PQ}")
     except Exception as e:
-        print(f"(parquet nao gerado - instale pandas+pyarrow se quiser: {type(e).__name__})")
+        print(f"(parquet nao gerado - instale: pip install pandas pyarrow. {type(e).__name__}: {e})")
 
 if __name__ == "__main__":
     main()
