@@ -1,6 +1,29 @@
-__pycache__/5_classify_all_texts.cpython-310.pyc
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Data and outputs (recreated by the scripts)
+*.csv
+*.tsv
+*.parquet
+*.txt
+!cespe_urls/*.txt
+*.pdf
+*.zip
+*.log
+
+# Credentials (never commit)
+*.json
+.env
+*.pem
+
+# Editor / OS
 .DS_Store
-__pycache__/5_classify_all_texts.cpython-310.pyc
-__pycache__/11_classify_files.cpython-310.pyc
-__pycache__/21_names_by_concurso.cpython-310.pyc
-__pycache__/20_extract_names.cpython-310.pyc
+*.swp
+*conflicted copy*
+
+# tool leftovers
+.__write_test__
